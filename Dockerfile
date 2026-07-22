@@ -35,7 +35,7 @@ RUN pip install --upgrade pip \
 
 COPY app/ /app/
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh \
+RUN chmod 755 /entrypoint.sh \
     && mkdir -p /data \
     && useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /app /data
