@@ -1,0 +1,45 @@
+# secrets & local env
+.env
+.env.local
+.env.*.local
+secrets.json
+config.local.json
+
+# runtime data
+data/
+webui/webui.db
+webui/webui.db-shm
+webui/webui.db-wal
+webui/webui.db-journal
+webui/logs/
+*.db
+*.db-*
+
+# accounts / tokens
+account_*.json
+mail.txt
+accounts.txt
+outlook_accounts.txt
+*.session
+*.token
+run.log
+run*.log
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# node
+node_modules/
+
+# os / ide
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
