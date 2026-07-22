@@ -223,21 +223,67 @@ class CFTempEmailProvider:
         return email
 
     def _get_mails(self, email: str) -> list:
-        """拉指定邮箱的最新邮件列表（默认 limit=20）。"""
-        resp = self._request(
-            "GET", "/admin/mails",
-            params={"limit": 20, "offset": 0, "address": email},
-            timeout=10,
-        )
-        status = getattr(resp, "status_code", 0)
-        if status != 200:
-            logger.debug(f"[cf_temp] /admin/mails 返回 {status}")
-            return []
-        data = self._parse_json(resp)
-        if isinstance(data, dict):
-            return data.get("results") or data.get("mails") or []
-        if isinstance(data, list):
-            return data
+        """拉指定邮箱的最新邮件列表。
+
+        兼容两种 Worker：
+          - gpt-mail-worker: GET /admin/mails?address=...
+          - grok-mail-worker: GET /api/mails (+ address 过滤)
+        """
+        paths = [
+            ("/admin/mails", {"limit": 20, "offset": 0, "address": email}),
+            ("/api/mails", {"limit": 50, "offset": 0, "address": email}),
+            ("/api/mails", {"limit": 50}),
+        ]
+        email_l = (email or "").strip().lower()
+        for path, params in paths:
+            try:
+                resp = self._request("GET", path, params=params, timeout=10)
+            except Exception as e:
+                logger.debug(f"[cf_temp] {path} 请求异常: {e}")
+                continue
+            status = getattr(resp, "status_code", 0)
+            if status != 200:
+                logger.debug(f"[cf_temp] {path} 返回 {status}")
+                continue
+            data = self._parse_json(resp)
+            # health-like fallback payload means wrong endpoint/auth
+            if isinstance(data, dict) and data.get("service") and data.get("ok") is True and "domains" in data:
+                logger.debug(f"[cf_temp] {path} 返回 health payload，跳过")
+                continue
+            if isinstance(data, dict):
+                items = (
+                    data.get("results")
+                    or data.get("mails")
+                    or data.get("messages")
+                    or data.get("data")
+                    or data.get("items")
+                    or []
+                )
+            elif isinstance(data, list):
+                items = data
+            else:
+                items = []
+            if not isinstance(items, list):
+                continue
+            filtered = []
+            for m in items:
+                if not isinstance(m, dict):
+                    continue
+                to_addr = m.get("to_address") or m.get("address") or ""
+                if not to_addr and isinstance(m.get("to"), list) and m.get("to"):
+                    first = m["to"][0]
+                    if isinstance(first, dict):
+                        to_addr = first.get("address") or ""
+                    else:
+                        to_addr = str(first)
+                if email_l and to_addr and email_l not in str(to_addr).lower():
+                    continue
+                if m.get("verification_code") and not m.get("raw"):
+                    m = dict(m)
+                    m["raw"] = str(m.get("verification_code"))
+                filtered.append(m)
+            if filtered or path.startswith("/admin/"):
+                return filtered
         return []
 
     def wait_for_otp(
